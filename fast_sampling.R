@@ -10,14 +10,20 @@ library(hitandrun)
 ## the minimum angle of each S_k. 
 ## The problem then reduces to uniform sampling from these simplices.
 sds <- function(constr, N, homogeneous=FALSE, transform=NULL) {
+  timing <- list()
+ 
   if (homogeneous) { # eliminate the homogeneous coordinate
     n <- ncol(constr$constr)
     constr$rhs <- constr$rhs - constr$constr[, n]
     constr$constr <- constr$constr[,1:(n-1)]
   }
-  verts <- findVertices(constr)
+  timing$vertices <- system.time(
+    verts <- findVertices(constr)
+  )
   n <- ncol(verts)
-  decomposition <- delaunayn(verts, options="QJ", full=TRUE)
+  timing$tesselation <- system.time(
+    decomposition <- delaunayn(verts, options="QJ", full=TRUE)
+  )
   simplex.vert.indices <- decomposition$tri
 
   ## the number of simplices is K
@@ -25,22 +31,26 @@ sds <- function(constr, N, homogeneous=FALSE, transform=NULL) {
   volumes <- decomposition$areas
   prob <- volumes / sum(volumes)
 
-  ## Probability of hitting each simplex is proportional to area
-  simplex.idx <- sample(K, N, replace=TRUE, prob=prob)
+  timing$info <- c(n=n, v=nrow(verts), K=K)
 
   ## for each simplex k, do a convex combination of it's vertices
+  timing$sample.indices <- system.time(
+    simplex.idx <- sample(K, N, replace=TRUE, prob=prob)
+  )
   samples <- matrix(NA, nrow=N, ncol=n)
+  timing$sample.weights <- system.time(
+    W <- simplex.sample(n + 1, N)$samples
+  )
 
-  W <- simplex.sample(n + 1, N)$samples
-
-  for(k in 1:K){
-    # the k-th simplex 
-    S.k.prime <- verts[simplex.vert.indices[k,],]
-    
-    # random uniform convex combination weights
-    sel <- simplex.idx == k
-    samples[sel, ] <- W[sel, ] %*% S.k.prime
-  }
+  timing$transform <- system.time(
+    for(i in 1:N){
+      # the k-th simplex 
+      S.k.prime <- verts[simplex.vert.indices[simplex.idx[i],],]
+      
+      # random uniform convex combination weights
+      samples[i, ] <- W[i, , drop=FALSE] %*% S.k.prime
+    }
+  )
 
   # Add the homogeneous coordinate if necessary
   samples <- 
@@ -52,8 +62,15 @@ sds <- function(constr, N, homogeneous=FALSE, transform=NULL) {
 
   # Apply the transformation if specified
   if (is.null(transform)) {
-    list(samples=samples)
+    list(samples=samples,timing=timing)
   } else {
-    list(samples=samples %*% t(transform))
+    list(samples=samples %*% t(transform), timing=timing)
   }
+}
+
+# filter a set of constraints
+filterConstraints <- function(constr, sel) {
+  list(constr = constr[['constr']][sel, , drop=FALSE],
+       rhs = constr[['rhs']][sel],
+       dir = constr[['dir']][sel])
 }

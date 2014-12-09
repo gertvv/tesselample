@@ -1,12 +1,5 @@
 source('fast_sampling.R')
 
-# filter a set of constraints
-filterConstraints <- function(constr, sel) {
-  list(constr = constr[['constr']][sel, , drop=FALSE],
-       rhs = constr[['rhs']][sel],
-       dir = constr[['dir']][sel])
-}
-
 ## Simple 3-dimensional example
 
 n <- 3
@@ -68,19 +61,3 @@ samples.sds <- sds(constr, 1E4, homogeneous=TRUE)$samples
 
 library(uniformity)
 cat(paste0("P-value for uniformity: ", pnorm(testUniformMST(bench=samples.rej, test=samples.sds)), "\n"))
-
-
-## n-dimensional
-for (n in 3:15)  {
-constr <- do.call(mergeConstraints,
-  c(list(simplexConstraints(n=n)),
-    lapply(2:n, function(i) { ordinalConstraint(n=n, i=i, j=1) })))
-
-  transform <- simplex.createTransform(n=n)
-  constr <- transformConstraints(transform, filterConstraints(constr, constr$dir == "<="))
-
-  print(paste("n =", n))
-  print(system.time(
-    samples.sds <- sds(constr, 1E4, homogeneous=TRUE)$samples
-  ))
-}

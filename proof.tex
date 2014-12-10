@@ -1,0 +1,262 @@
+\documentclass[11pt]{article}
+\usepackage{geometry} 
+\geometry{letterpaper} 
+
+\usepackage{graphicx}
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{bm}
+\usepackage{color}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{definition}[theorem]{Definition}
+ 
+\newcommand{\red}[1]{\textcolor{red}{#1}}
+\newcommand{\blue}[1]{\textcolor{blue}{#1}}
+
+\newcommand{\set}[1]{\mathcal{#1} }
+\newcommand{\dd}[2]{\frac{\mathrm{d} #1} {\mathrm{d} #2}}
+\newcommand{\pdd}[2]{\frac{\partial #1} {\partial #2}}
+\newcommand{\colvec}[2]{\left( \begin{array}{c} #1 \\ #2 \end{array} \right)} 
+
+\title{Efficient sampling from uniform density $n$-polytopes}
+\author{T. A. Trikalinos \and Gert van Valkenhoef}
+%\date{} 
+
+\begin{filecontents}{references.bib}
+	@article{avis1992,
+		year={1992},
+		issn={0179-5376},
+		journal={Discrete \& Computational Geometry},
+		volume={8},
+		number={1},
+		doi={10.1007/BF02293050},
+		title={A pivoting algorithm for convex hulls and vertex enumeration of arrangements and polyhedra},
+		url={http://dx.doi.org/10.1007/BF02293050},
+		publisher={Springer-Verlag},
+		author={Avis, David and Fukuda, Komei},
+		pages={295-313},
+		language={English}
+	}
+
+	@article{hitandrun,
+		author = {Tervonen, T. and van Valkenhoef, G. and Ba\c{s}t\"{u}rk, N. and Postmus, D.},
+		title = {Hit-And-Run enables efficient weight generation for simulation-based multiple criteria decision analysis},
+		journal = {European Journal of Operational Research},
+		doi = {10.1016/j.ejor.2012.08.026},
+	  year = 	 {2013},
+	  volume = 	 {224},
+	  number = 	 {3},
+	  pages = 	 {552--559}
+	}
+\end{filecontents}
+
+
+\begin{document}
+   
+\maketitle
+\tableofcontents
+
+\section{Introduction}
+
+We are concerned with the problem of sampling from the uniform density over a convex polytope, i.e. a bounded volume in $n$-dimensional space defined by a set of linear inequality constraints.
+This sampling problem has many applications, but we are primarily interested in application to sampling of weight vectors for MCDA.
+Previous work has shown that the Hit-and-Run algorithm can be applied in this use case \cite{hitandrun}.
+A disadvantage of Hit-and-Run is that it is a Markov Chain Monte Carlo (MCMC) algorithm, and thus there is a need for convergence checking, or oversampling to ensure convergence has been reached.
+Here we explore a simple exact sampling algorithm based on a triangulation (tesselation) of the polytope.
+
+\section{Methods}
+
+\subsection{Definitions and requisites}
+
+\begin{definition}[Polytope]
+    A bounded convex $n$-polytope or polytope is the set of points
+    \begin{equation}\label{eq:polytope}
+        \set{P} = \{ \ 
+            \bm{p}: \bm{A}\bm{p} \leq \bm{b} \ 
+        \}
+    \end{equation}
+    in $\mathbb{R}^n$, 
+    where $\bm{A}$ is a $r \times n$ real matrix of coefficients, $\bm{b}$ is a $r$-vector, and the relation~$\leq$ is meant elementwise.
+%
+%   A polytope can be determined by its vertices or extreme points $\set{V}$ ($\set{V}$ represenation of polytopes). 
+\end{definition}
+$\\$
+
+\begin{definition}[Simplex]
+    Let  $\bm{v}_0, \dots, \bm{v}_n$ be points in general position in $\mathbb{R}^n$. The set 
+    \begin{equation}\label{eq:simplex}
+        \set{S} = \Big\{ \bm{p} : \bm{p}=  a_0 \bm{v}_0 + \dots a_n \bm{v}_n, a_i \geq 0, \sum_{i=0}^{n}{a_i} = 1  \ \forall \ i=0, \dots, n \Big\}
+    \end{equation}
+    is a $n$-simplex or simplex in $\mathbb{R}^n$. 
+    $\set{S}$ is an $n$-dimensional polytope.
+\end{definition}
+
+\noindent
+More compactly, write $\bm{V}_0 = (\bm{v}_1 - \bm{v}_0, \dots , \bm{v}_n- \bm{v}_0)$ and $\bm{a} = (a_1, \dots, a_n)^T$, with $(^T)$ denoting transpose. Then 
+\begin{eqnarray*}
+    \bm{p} =& a_0 \bm{v}_0 + a_1 \bm{v}_1 + \dots a_n \bm{v}_n  \\
+     =& (1 - \sum_{i=1}^n{a_i}) \bm{v}_0 + \sum_{i=1}^n{a_i \bm{v}_i}  \\
+     =& \bm{v}_0 + \sum_{i=1}^n{a_i (\bm{v}_i -  \bm{v}_0)}  \\
+     =& \bm{v}_0 + \bm{V}_0 \bm{a},  
+\end{eqnarray*}
+and \eqref{eq:simplex} becomes 
+
+\begin{equation}\label{eq:simplex.mat}
+    \set{S} = \{ \bm{p} : \bm{p}=  \bm{v}_0 + \bm{V}_0 \bm{a} , \ \bm{a} \geq \bm{0}, \bm{a} \bm{1}^T \leq 1 \},
+\end{equation}
+where $\geq, \leq$ are meant elementwise. 
+
+\noindent
+The volume of $\set{S}$ is 
+\begin{equation}\label{eq:content}
+    \textrm{Vol}(\set{S}) = \frac{|\det(\bm{V}_0)|}{n!}, 
+\end{equation}
+where $|\cdot|$ means absolute value and $\det(\cdot)$ means determinant. 
+Because $\bm{v}_0, \dots, \bm{v}_n$ are in general position, rank$(\bm{V}_0)=n$ and $\det(\bm{V}_0) \neq 0$. 
+
+$\\$
+
+\begin{lemma}{Simplicial decomposition of polytopes} \label{le:simdecomp}$\\$
+    An $n$-polytope $\mathcal{P}$ can be decomposed into $n$-dimensional simplices $\mathcal{S}_k, \ k=1,\dots K$ such that 
+    $\mathcal{P} = {\mathcal{S}_1} \cup \dots \cup {\mathcal{S}_K}$ 
+    and, for $k \neq l$,  
+    $\mathcal{S}_k \cap \mathcal{S}_l = \emptyset$ 
+    or 
+    $\mathcal{S}_k \cap \mathcal{S}_l = \mathcal{T}$, where $\mathcal{T}$ is a lower-dimensional simplex. 
+\end{lemma}
+
+
+\begin{proof} $\\$
+    \red{The proof is from textbooks or papers.}
+\end{proof}
+
+
+\begin{corollary}\label{cor:vol}
+    If $\mathcal{S}_1, \dots, \mathcal{S}_K$ is a simplicial decomposition of $\mathcal{P}$, then $\mathrm{Vol}(\mathcal{P}) = \sum_{k=1}^K{\mathrm{Vol}(\mathcal{S}_k)}$.
+\end{corollary}
+
+
+
+\subsection{Construction of a uniform density over a simplex $\set{S}$}
+
+\begin{theorem}\label{th:g(p)}
+    Let $\bm{w}=[w_i], \ i=1, \dots, n$ be a random vector with $w_i \geq 0, w_1 + \dots + w_n \leq 1$, and density $h(\bm{w})$. 
+    Then the vector $\bm{p} = \bm{v}_0 + \bm{V}_0 \bm{w} \in \set{S}$ has density 
+    \begin{equation}
+        g(\bm{p}) =  h(\bm{w}) |\det(\bm{V}_0)|^{-1},
+    \end{equation}
+\end{theorem}
+
+
+\begin{proof} $\\$
+    The proof is immediate from the multivariate Change of Variables Theorem:  
+    \begin{equation*}
+        g(\bm{p}) =  h(\bm{w}) \Big| \det \Big( {\dd{\bm{w}}{\bm{p}}} \Big) \Big| = h(\bm{w}) |\det(\bm{V}_0)|^{-1},
+    \end{equation*}
+    where $\Big( \dd{\bm{w}}{\bm{p}} \Big)_{ij} = \pdd{w_i}{p_j} = (\bm{V}_0^{-1})_{ij}$.
+\end{proof}
+
+
+To construct a uniform probability density in $\set{S}$ define a random variable $\bm{w}$ with uniform density on a regular simplex ${\set{W} = \{ w_i \geq 0, \sum{w_i} \leq 1, i=0, \dots, n\} }$. Such is a $n$-dimensional Dirichlet distribution
+\begin{equation}\label{eq:dirichlet}
+    h(\bm{w}) = \textrm{Dirichlet}(\bm{1}) =  (n!)^{-1}.
+\end{equation}
+From Theorem \ref{th:g(p)} the choice \eqref{eq:dirichlet} results in a random vector $\bm{p}$ with uniform density $g(\bm{p}) = (|\det(\bm{V}_0)| n!)^{-1}$ over $\set{S}$. 
+
+\subsection{Construction of a uniform density over a polytope $\set{P}$}
+
+Write 
+\begin{equation}\label{eq:f(w).1}
+    f(\bm{p}) = \begin{cases}
+        g_k(\bm{p}) P(\bm{p} \in \set{S}_k) & \textrm{, if } \bm{p} \in \set{S}_k \subseteq \set{P} \ \forall \ k =1, \dots, K \\
+        0 & \textrm{, if } \bm{p} \notin \set{P} 
+        \end{cases}, 
+\end{equation}
+where $P(\bm{p} \in \set{S}_k)$ the probability that $\bm{p}$ belongs to the $k$-th simplex of a decomposition of $\set{P}$ as per Lemma \ref{le:simdecomp}.  Choose $P(\bm{p} \in \set{S}_k) = \textrm{Vol}(\set{S}_k) / \textrm{Vol}(\set{P})$ for all $k$. 
+Then for the $k$-th simplex 
+\begin{eqnarray*}\label{eq:f(w).2}
+        g_k(\bm{p}) P(\bm{w} \in \set{S}_k) &=& g_k(\bm{p}) \Big( \frac{\textrm{Vol}(\set{S}_k)} {\textrm{Vol}(\set{P})} \Big) \\ 
+        &=& \frac{1}{|\det(\bm{V}_{0k})| n!} \Big( \frac{|\det(\bm{V}_{0k})| / n!}{\sum_{j=1}^K{|\det(\bm{V}_{0j})|} / n!} \Big) \\
+        &=& \frac{1}{ n! \ \sum_{j=1}^K{|\det(\bm{V}_{0j})|}},
+\end{eqnarray*}
+%
+and \eqref{eq:f(w).1} becomes
+%
+\begin{equation}\label{eq:f(w).2}
+    f(\bm{p}) = 
+    \begin{cases}
+        \big( n! \ \sum_{j=1}^K{|\det(\bm{V}_{0j})|} \big)^{-1} 
+            & \textrm{, if } \bm{p} \in \set{P} \\
+        0   & \textrm{, if } \bm{p} \notin \set{P} 
+    \end{cases}. 
+\end{equation}
+As per \eqref{eq:f(w).2}, the construction results in a uniform density distribution over the polytope $\set{P}$.
+
+\subsection{Algorithm for sampling}
+
+Given the results derived above, we can sample uniformly from a convex polytope $\set{P}$ as follows:
+
+\begin{enumerate}
+	\item Find the vertices $\bm{v}_0, \dots, \bm{v}_n$ of the polytope. This can be achieved using the Avis-Fukuda pivoting algorithm \cite{avis1992}.
+	\item Decompose $\set{P}$ in $n$-simplices $\set{S}_1, \dots, \set{S}_K$ using, e.g., Delaunay triangulation (any triangulation satifying Lemma \ref{le:simdecomp} is appropriate). The triangulation returns the vertices $\set{V}(\set{S}_k)$ and content Vol$(\set{S}_k)$ of each simplex $\set{S}_k$. Set $\bm{q} = (q_1, \dots, q_K)$ with $q_k = \mathrm{Vol}(\set{S}_k) / \mathrm{Vol}(\set{P})$.
+    \item For the $i$-th of $N$ samples: 
+        \subitem -- Draw a random vector $\bm{w}_i$ form a regular $n$-simplex
+        \begin{equation}
+            \bm{w}_i  \sim \textrm{Dirichlet}(\bm{1}).
+        \end{equation}
+        %
+        \subitem -- Decide which simplex is sampled from 
+        \begin{equation}
+			j_i \sim \textrm{Categorical}(\bm{q}).
+        \end{equation}
+        %
+        \subitem -- Compute the point $\bm{p}_i$ 
+        \begin{equation}
+            \bm{p}_i = \bm{v}_{{j_i}0} + \bm{V}_{{j_i}0} \bm{w}_i 
+        \end{equation}
+
+\end{enumerate}
+
+\subsection{Implementation}
+
+Our implementation is in R, using the following components for each step:
+\begin{enumerate}
+	\item \texttt{findVertices} from the \texttt{hitandrun} package, which in turn uses the \texttt{rcdd} package.
+	\item \texttt{delaunayn} from the \texttt{geometry} package.
+	\item \texttt{simplex.sample} from the \texttt{hitandrun} package to sample from the degenerate Dirichlet, and \texttt{sample} from the \texttt{base} package to sample from the Categorical.
+\end{enumerate}
+
+\subsection{Complexity}
+
+The triangulation is by far the dominant term in both time and space complexity, because the number of simplices generated may scale as $n!$.
+Hence, the algorithm is not feasible in high-dimensional space.
+
+\section{Results}
+
+On a 1.9 GhZ Intel Core i7-3517U CPU and 4 GB of RAM, the following running times were observed for a relatively simple polytope: \\
+\begin{tabular}{rrr}
+	n & t (s) & K \\
+	2 & 0.159 & 1 \\
+	3 & 0.154 & 5 \\
+	4 & 0.159 & 44 \\
+	5 & 0.162 & 210 \\
+	6 & 0.227 & 2 486 \\
+	7 & 0.749 & 19 763 \\
+	8 & 10.439 & 359 214
+\end{tabular} \\
+For $n=9$, the triangulation started swapping out of RAM, and therefore no valid timing results were obtained.
+Anecdotally, the running time is about three minutes for $n=9$.
+Note that the triangulation only becomes a dominant cost at $n=7$, and in lower dimensions the running time could be reduced by about $40\%$ through more efficient implemenation of step 3 of the algorithm.
+
+Rejection sampling is similarly only feasible up to about $n=8$ \cite{hitandrun} (note that their $n$ is our $n + 1$).
+However, our algorithm is significantly faster for $n=7$ and $n=8$, for example rejection sampling takes over 10 minutes for $n=8$.
+
+\bibliographystyle{abbrv}
+\bibliography{references}
+
+\end{document}
